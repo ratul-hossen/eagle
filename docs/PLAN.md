@@ -190,31 +190,51 @@ git clone https://github.com/<you>/eagle && cd eagle
 
 | Command | What it does |
 |---|---|
-| `./eagle.sh` | Runs the wizard if not set up; otherwise starts and opens the browser |
-| `./eagle.sh setup` | Re-runs the wizard (name, password, model, voice) |
+| `./eagle.sh` | Installs if needed, starts, and opens the browser (the first-run setup page if EAGLE isn't set up yet) |
+| `./eagle.sh setup --terminal` | The same first-run setup in the terminal, for people who prefer it |
 | `./eagle.sh start` / `stop` / `status` | Server on/off, PID file `data/eagle.pid` |
 | `./eagle.sh doctor` | Checks everything: Node, Python, Ollama, models, disk, port, file permissions, database integrity |
 | `./eagle.sh models` | List / pull / recommend Ollama models for this hardware |
 | `./eagle.sh update` | `git pull` (verified tag) → `npm ci` → build → migrate. **The only command that needs internet on its own** (says so first) |
 | `./eagle.sh backup` / `restore <file>` | Encrypted backup |
-| `./eagle.sh reset-password` | From the terminal (physical access = owner) |
+| `./eagle.sh reset-password` | Forgotten password, from the terminal (§6.2.3) |
 | `./eagle.sh offline` / `online` | Network mode from the terminal |
 | `./eagle.sh uninstall` | Removes the app; asks separately whether to delete `data/` |
 
 ### 4.2 First run
 
+The terminal only installs and starts EAGLE. Everything personal — including the password — is
+set in the browser.
+
+**In the terminal (`./eagle.sh`):**
+
 1. **Checks**: OS (Linux, macOS; Windows → WSL2), Node ≥ 20, Python ≥ 3.10, `git`, free disk, RAM, GPU (`nvidia-smi` / Apple Silicon).
 2. **Install (needs internet — this is the install step, and it says so)**: `npm ci` (exact versions from the lockfile),
    `python -m venv python/.venv && pip install -r requirements.txt --require-hashes`.
    If Ollama is missing it shows the install command (it never runs `curl | sh` without your confirmation).
-3. **Models**: recommends a chat model and an embedding model for the RAM/GPU and runs `ollama pull` (AI_MODELS.md §3).
-4. **Secrets**: `data/secrets.json` (random 32-byte session key, data key) — `chmod 600`, `umask 077`.
-5. **About you**: your name, what to call the assistant, language (Bangla/English), timezone
-   (auto-detected; MERCY hard-codes `Asia/Dhaka`, EAGLE makes it configurable).
-6. **Password** (+ optional TOTP QR code — scan with an authenticator app, works offline).
-7. **Database**: PGlite init + migrate + generic seed.
-8. **Build**: `next build` (telemetry off: `NEXT_TELEMETRY_DISABLED=1`).
-9. **Start** on `127.0.0.1:4810` (configurable port) and open the default browser.
+3. **Database**: PGlite init + migrate + generic seed. `data/` created with `chmod 700`, `umask 077`.
+4. **Build**: `next build` (telemetry off: `NEXT_TELEMETRY_DISABLED=1`).
+5. **Start** on `127.0.0.1:4810` (configurable port).
+6. **Setup link**: because no password exists yet, it creates a one-time **setup token**, prints
+   `http://127.0.0.1:4810/setup#<token>` and opens it in the default browser. Only that link can
+   open the setup page, so no other program or website on the computer can claim EAGLE first.
+   The token is stored only as a SHA-256 hash and expires in 30 minutes (run `./eagle.sh` again
+   for a new one).
+
+**In the browser (`/setup`), a short step-by-step page in MERCY's design:**
+
+1. **Language** (Bangla / English) — the setup page itself switches language.
+2. **About you**: your name, what to call the assistant, timezone (auto-detected; MERCY
+   hard-codes `Asia/Dhaka`, EAGLE makes it configurable).
+3. **Password**: typed twice, with a strength meter (at least 10 characters; a long passphrase is
+   suggested). Stored only as an Argon2id hash (§6.2).
+4. **Recovery key**: shown once (§6.2.3). *Download* or *Print*, then type its last 4 characters
+   to confirm it was saved. Setup can't finish without this step.
+5. **Two-step sign-in (optional)**: TOTP QR code for an authenticator app (works offline).
+6. **Connect a model**: the "Connect a model" cards (AI_MODELS.md §2), with the models that fit
+   this machine pre-selected and a download progress bar. Can be skipped and done later in admin.
+7. **Voice (optional)**: download the local voice models.
+8. **Done** → the chat opens, signed in.
 
 After setup EAGLE runs fully **with the internet switched off** (Offline mode). A self-test
 (`doctor --offline`) proves it: it runs chat + RAG + voice with networking disabled
@@ -305,18 +325,72 @@ composer border red and shows "This message will be sent to <provider>".
 | Secrets in logs | API keys masked (last 4), bodies not logged |
 | Personal data pushed to the public repo | `.gitignore` + pre-commit hook (blocks `data/`, `.env*`, `*.gguf`, `secrets.json`) |
 
-### 6.2 Auth
+### 6.2 Passwords, sign-in and recovery
 
-- Password: Argon2id (64 MB memory, t=3), hash stored in `data/`.
-- Optional TOTP with recovery codes (shown once during setup).
-- Session: HMAC-signed httpOnly cookie, `SameSite=Strict`; 30 minutes idle → **lock screen**
-  (work continues in the background, the UI is locked); 12 hours maximum (MERCY's owner-session logic reused).
-- Admin → Security: active sessions, recent unlocks, failed attempts (MERCY's `security_log` reused).
+#### 6.2.1 Sign-in
+
+- **One password** for everything: the chat and the admin panel. Set on the first-run page (§4.2).
+- Optional **TOTP** second step.
+- Session: a random 256-bit token in an httpOnly, `SameSite=Strict` cookie. The database stores
+  only its **SHA-256 hash**, so a copied database can't be used to sign in. Sessions are revocable
+  in Admin → Security.
+- 30 minutes idle → **lock screen** (work continues in the background, the UI is locked);
+  12 hours maximum (MERCY's owner-session logic reused).
+- **Re-confirm for sensitive actions**: switching to Online mode, changing the password,
+  showing or changing API keys, a new recovery key, backup/restore and erase ask for the password
+  again if it wasn't entered in the last 10 minutes.
+- Failed attempts: 5 within 15 minutes lock sign-in for the rest of those 15 minutes (MERCY's rate
+  limit, local). Recovery attempts have the same limit.
+- Admin → Security: active sessions, recent sign-ins, failed attempts (MERCY's `security_log` reused).
+
+#### 6.2.2 Changing the password
+
+Admin → Security → **Change password**: current password + new password twice. Only the data
+key's wrapping changes (§6.3), so nothing is re-encrypted and nothing is lost. All other
+sessions are signed out.
+
+#### 6.2.3 Forgot password
+
+EAGLE has no email and no server, so recovery works with things only you have:
+
+| Way | Where | Result |
+|---|---|---|
+| **Recovery key** | Sign-in page → **Forgot password?** → enter the recovery key → set a new password | Everything kept. A new recovery key is shown (the old one stops working) |
+| **Recovery key from the terminal** | `./eagle.sh reset-password` → enter the recovery key | Same as above, for when the browser page isn't reachable |
+| **No recovery key** | `./eagle.sh reset-password --erase-encrypted` (type `ERASE` to confirm) | A new password is set, but the encrypted data — memory, private notes, chats, API keys, connector tokens, TOTP — **cannot be recovered and is deleted**. Knowledge files, settings, agents, timers and models are kept |
+
+The recovery key is a 24-word phrase (or the same as a 32-character code), generated at setup.
+EAGLE stores it only as an Argon2id hash plus a second wrapping of the data key (§6.3). The
+honest part: if both the password and the recovery key are lost, encrypted data is gone — that is
+exactly what keeps it safe from anyone else. The setup page and the Security page say this in plain words.
+
+The terminal reset needs shell access to this computer's user account, which counts as being the owner.
+
+#### 6.2.4 Hashing — used wherever possible
+
+A secret is **hashed** when EAGLE only needs to check it, and **encrypted** when EAGLE must use
+the original value (for example to send an API key to a provider).
+
+| Secret | Stored as | Why |
+|---|---|---|
+| Password | **Argon2id** hash (64 MB memory, t=3, unique salt) | Only checked; slow by design against guessing |
+| Recovery key | **Argon2id** hash (+ wraps the data key) | Only checked |
+| TOTP backup codes | **Argon2id** hash each, one-time use | Only checked |
+| Session tokens | **SHA-256** hash | Only checked; a copied database gives no sessions |
+| Setup token, pairing codes (Jupyter) | **SHA-256** hash + expiry, one-time use | Only checked |
+| API keys (Gemini, Groq, Ollama cloud), connector tokens | AES-256-GCM **encrypted** | EAGLE must send the real value |
+| TOTP secret | AES-256-GCM **encrypted** | Needed to compute codes |
+| Colab connection token / end-to-end key | AES-256-GCM **encrypted** | Needed for every request |
+| Model files, backups | **SHA-256** checksum (backups: HMAC) | Detects tampering or corruption |
+
+All comparisons use constant-time equality (`timingSafeEqual`), as in MERCY. Hashing uses
+well-known libraries (`argon2`/`@node-rs/argon2`, Node's `crypto`) — no home-made cryptography.
 
 ### 6.3 Encryption at rest
 
-- A random 256-bit **data key**, wrapped with a key derived from the password (Argon2id) and
-  stored in `secrets.json`. Changing the password only re-wraps it; data is not re-encrypted.
+- A random 256-bit **data key**, wrapped twice and stored in `secrets.json`: once with a key
+  derived from the password (Argon2id), once with a key derived from the recovery key. Changing
+  the password or the recovery key only re-wraps it; data is not re-encrypted.
 - AES-256-GCM for: memory, private notes, chat messages, cloud API keys, connector tokens.
 - **Honest trade-off**: knowledge chunk text and embeddings are not encrypted, because search
   (full-text + vector) needs plaintext. That is why **full-disk encryption** is strongly
@@ -335,7 +409,20 @@ anywhere; copy the file yourself if you want it elsewhere. Optional automatic da
 ## 7. Admin panel (you only)
 
 MERCY's admin shell (sidebar, save bar, ⌘S, mobile pills) stays the same. Sign-in is EAGLE's
-password; there is no separate Google sign-in. Sections:
+own password (§6.2); there is no Google sign-in.
+
+**How to open it** — both ways, like MERCY plus a shortcut:
+
+- An **admin icon at the bottom left** of the chat sidebar (next to the theme toggle) opens the
+  admin panel. On phones it is in the sidebar drawer's footer. Keyboard: `Ctrl/⌘ + ,`.
+- The admin panel is its own page at **`/admin`** (as in MERCY), with a **Back to chat** link.
+  It can be bookmarked or opened directly.
+
+**Everything is set from here.** After installation nothing needs a terminal or a config file:
+models, Online/Offline, voice, identity, agents, keys, backups — all in the admin panel. The
+terminal is only for installing, updating and the password reset without a browser.
+
+Sections:
 
 | Group | Section | Contents |
 |---|---|---|
@@ -352,7 +439,7 @@ password; there is no separate Google sign-in. Sections:
 | AI | **Connect a model** | The six guided cards, auto-detect, pairing/connection codes (AI_MODELS.md §2) |
 | | **Models** | Every connected model with tier, status, abilities and eval score; roles, per-agent models, presets, compare; context length, temperature, data scope, keys; hardware info |
 | Privacy | **Network** | Offline/Online, allowlist, auto-off timer, **Network log** |
-| | **Security** | Password, TOTP, sessions, security log, lock timeout |
+| | **Security** | Change password, new recovery key, TOTP on/off, sessions, security log, lock timeout |
 | | **Backup** | Back up now, restore, schedule |
 | System | **System** | Database health, re-index all, logs, version, update instructions |
 
@@ -403,6 +490,8 @@ what was missed, reusing MERCY's catch-up logic (`nextDue`).
 - `ChatApp`, `Message`, `Markdown`, `VoiceOverlay`, `team.tsx`, `FlowCanvas` and `Eagle3D` are ported.
 - Removed: the "Owner mode" pill/timer, the unlock form, `/exit`, `/kneel`, visitor suggestions, the "Hiring?" link.
 - Starter suggestions are tasks (like MERCY's owner starters), personalised.
+- **Admin icon at the bottom left** of the sidebar → `/admin` (§7).
+- New pages in MERCY's design: `/setup` (first run), `/login` (with **Forgot password?**), `/recover`, and the lock screen.
 - A small status in the header: model name + 🟢/🟡/🔴 tier + network mode icon (✈️ offline).
 - A **model picker** in the composer (local by default; cloud models appear in Online mode, with a red border).
 - Light/dark, `prefers-reduced-motion` and the Bangla font stay as they are.
@@ -439,9 +528,11 @@ At the end of every phase: `typecheck`, `lint`, `test`, `next build` clean + **o
 
 ### Phase 1 — Local foundation
 - [ ] PGlite adapter (`db.ts`) + schema (MERCY's public and owner databases merged into one).
-- [ ] Local auth (Argon2id, TOTP, sessions, lock screen, rate limit).
+- [ ] Local auth: `/setup` with setup token, Argon2id password, recovery key, TOTP, hashed sessions, lock screen, re-confirm, rate limit.
+- [ ] Forgot password: `/recover` + `./eagle.sh reset-password` (with and without the recovery key).
+- [ ] Admin icon (bottom left) + `/admin` route.
 - [ ] One mode: `isOwner()` → always true when signed in; owner-only branches simplified.
-- [ ] `eagle.sh` (checks, install, setup wizard, start/stop/status/doctor).
+- [ ] `eagle.sh` (checks, install, setup link, start/stop/status/doctor, `setup --terminal`).
 - [ ] Local fonts, CSP, Host/Origin checks, telemetry off.
 
 ### Phase 2 — Local AI

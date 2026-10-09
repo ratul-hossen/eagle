@@ -34,7 +34,7 @@ Setup must take minutes, not an afternoon. Five mechanisms make that happen.
 
 ### 2.1 One "Connect a model" screen
 
-Admin → AI → **Connect a model** (also step 3 of the first-run wizard) shows six cards, one per
+Admin → AI → **Connect a model** (also step 6 of the first-run page, PLAN.md §4.2) shows six cards, one per
 way above. Each card is a short guided flow — never a blank form:
 
 | Card | Steps in EAGLE |
