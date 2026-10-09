@@ -15,3 +15,12 @@ git clone https://github.com/<you>/eagle && cd eagle
 
 - Plan: [docs/PLAN.md](docs/PLAN.md)
 - AI models (Ollama, Jupyter + Hugging Face, Colab, Gemini/Groq/Grok): [docs/AI_MODELS.md](docs/AI_MODELS.md)
+
+## License
+
+Copyright (C) 2026 MD RATUL HOSSEN
+
+EAGLE is free software: you can redistribute it and/or modify it under the terms of the
+[GNU Affero General Public License, version 3](LICENSE) (AGPL-3.0-only).
+
+AI models are not part of EAGLE. You download them yourself, and each model has its own license.

@@ -418,8 +418,11 @@ what was missed, reusing MERCY's catch-up logic (`nextDue`).
 - `config/eagle.example.toml` (non-secret defaults) → `data/config.toml`.
 - **Import from MERCY** (optional script): a MERCY export (knowledge files, identity, memory) as
   JSON → imported into EAGLE. It only reads the export file; MERCY is not changed.
-- **License**: MIT (simple) or AGPL-3.0 (anyone who modifies it and runs it as a service must
-  share the code). To be decided.
+- **License**: **AGPL-3.0-only** (decided; see `LICENSE`). Anyone may use, study, modify and share
+  EAGLE. Whoever distributes a modified version, or lets other people use one over a network, must
+  publish its full source under the same license — so every version of EAGLE stays auditable,
+  which fits a privacy tool. Running your own unmodified or modified copy for yourself requires
+  nothing. Every source file carries an `SPDX-License-Identifier: AGPL-3.0-only` header.
 - `CONTRIBUTING.md`, issue templates, `SECURITY.md` (how to report a vulnerability).
 
 ---
@@ -503,7 +506,7 @@ At the end of every phase: `typecheck`, `lint`, `test`, `next build` clean + **o
 ## 14. Open decisions
 
 1. **"Grok": xAI Grok, or Groq as in MERCY?** The plan keeps both (both are OpenAI-compatible).
-2. **License**: MIT or AGPL-3.0?
+2. ~~**License**~~ — decided: AGPL-3.0-only (§11).
 3. **Windows**: native support, or is WSL2 enough?
 4. A **Docker** option? (`./eagle.sh` stays the default; Docker can be optional, but GPU/Ollama setup gets harder.)
 5. Use EAGLE from a phone on the same Wi-Fi? (Off by default; HTTPS + TOTP when on.)
