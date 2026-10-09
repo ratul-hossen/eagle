@@ -14,7 +14,7 @@ git clone https://github.com/<you>/eagle && cd eagle
 > Status: **planning**. Nothing runs yet.
 
 - Plan: [docs/PLAN.md](docs/PLAN.md)
-- AI models (Ollama, Jupyter + Hugging Face, Colab, Gemini/Groq/Grok): [docs/AI_MODELS.md](docs/AI_MODELS.md)
+- AI models (Ollama local/cloud, Hugging Face in Jupyter or Colab, Gemini/Groq, your own model): [docs/AI_MODELS.md](docs/AI_MODELS.md)
 
 ## License
 

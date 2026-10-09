@@ -17,7 +17,7 @@ The AI model plan is in its own file: **[AI_MODELS.md](AI_MODELS.md)**.
 |---|---|---|
 | Where it runs | Vercel (cloud) | Your own computer (`127.0.0.1`) |
 | Database | Neon Postgres (cloud) | **PGlite** (embedded Postgres + pgvector, in `data/`) |
-| AI | Gemini → Groq → OpenRouter (all cloud) | **Ollama / local models first**, then Jupyter (local), then opt-in: Colab, Gemini, Groq/Grok |
+| AI | Gemini → Groq → OpenRouter (all cloud) | **Six ways, several at once** (AI_MODELS.md): Ollama local, Hugging Face in Jupyter, your own model (local); opt-in: Colab, Ollama cloud, Gemini, Groq |
 | Embeddings | Gemini API | **Local** (Ollama `bge-m3` / `nomic-embed-text`) |
 | Modes | Public MERCY + Owner mode + ObS (`/kneel`) | **One mode**: always owner powers, no "Owner mode" label anywhere |
 | Sign-in | Google OAuth + owner password + `/to-me` | **Local password (Argon2id) + optional TOTP**, no Google |
@@ -91,7 +91,7 @@ The AI model plan is in its own file: **[AI_MODELS.md](AI_MODELS.md)**.
 
 - **`./eagle.sh`** — install, setup wizard, run, update, backup (§4).
 - **Network mode**: Offline / Online switch + **Egress Gateway** + **Network log** (§5).
-- **Model Manager**: list/pull/delete Ollama models, hardware-based recommendations, provider tests (AI_MODELS.md).
+- **Connect a model**: one screen with six guided cards (Ollama local/cloud, Hugging Face in Jupyter or Colab, Gemini/Groq, your own model), auto-detect of local servers, pairing and connection codes, automatic tests (AI_MODELS.md §2).
 - **Local files tool**: a sandbox folder (`data/files/`) agents can read and write — nothing outside it.
 - **Local calendar** (ICS file) — offline alternative to Google Calendar; online sync optional later.
 - **Lock screen**: auto-locks when idle; unlock with password/TOTP.
@@ -123,7 +123,7 @@ The AI model plan is in its own file: **[AI_MODELS.md](AI_MODELS.md)**.
 │  data/  (gitignored)  db/ files/ models/ voices/ backups/ logs/      │ │
 └──────────────────────────────────────────────────────────────────────┼─┘
                                                                        ▼
-                     (Online mode only + allowlist + log)   Gemini / Groq / Grok /
+                     (Online mode only + allowlist + log)   Gemini / Groq / Ollama cloud /
                                                              Colab tunnel / Tavily
 ```
 
@@ -234,7 +234,7 @@ EAGLE starts at login.
 | | **Offline (default)** | **Online** |
 |---|---|---|
 | Local models (Ollama, Jupyter) | ✅ | ✅ |
-| Cloud models (Gemini, Groq, Grok) | ❌ | ✅ (if that provider is on) |
+| Cloud models (Gemini, Groq, Ollama cloud) | ❌ | ✅ (if that provider is on) |
 | Colab model | ❌ | ✅ (opt-in) |
 | Web search | ❌ (Kiwix if installed) | ✅ |
 | Google Calendar/Gmail, Telegram | ❌ | ✅ (later, Phase 7) |
@@ -349,8 +349,8 @@ password; there is no separate Google sign-in. Sections:
 | Team | **Agents** | Team, tools per agent, voices |
 | | **Timers & automations** | Same as MERCY |
 | | **Files** | Browse the `data/files/` sandbox |
-| AI | **Models** | Ollama models (pull/delete/test), default chat/agent/embedding models, context length, temperature, hardware info |
-| | **Providers** | Ollama, Jupyter/custom OpenAI-compatible, Colab, Gemini, Groq, Grok — on/off, tier, keys, order, test button, data scope |
+| AI | **Connect a model** | The six guided cards, auto-detect, pairing/connection codes (AI_MODELS.md §2) |
+| | **Models** | Every connected model with tier, status, abilities and eval score; roles, per-agent models, presets, compare; context length, temperature, data scope, keys; hardware info |
 | Privacy | **Network** | Offline/Online, allowlist, auto-off timer, **Network log** |
 | | **Security** | Password, TOTP, sessions, security log, lock timeout |
 | | **Backup** | Back up now, restore, schedule |
@@ -446,11 +446,13 @@ At the end of every phase: `typecheck`, `lint`, `test`, `next build` clean + **o
 
 ### Phase 2 — Local AI
 - [ ] Provider registry (database) + generic OpenAI-compatible client (extending MERCY's `chat.ts`).
-- [ ] Ollama: health, model list, pull with progress, chat (streaming + tools), embeddings.
-- [ ] Custom OpenAI-compatible endpoint (Jupyter / LM Studio / llama.cpp / vLLM) — loopback only when offline.
+- [ ] Ollama (native API): health, model list, pull with progress, chat (streaming + tools), embeddings; cloud-model detection.
+- [ ] Hugging Face in Jupyter: `eagle_local_hf.ipynb` (one settings cell), pairing endpoint.
+- [ ] Your own model: format detection, GGUF import, HF folder / LoRA routes, convert to GGUF.
+- [ ] Other OpenAI-compatible endpoints (LM Studio / llama.cpp / vLLM) + auto-detect of local ports.
+- [ ] Roles, per-agent models, chat model picker, `@model`, compare, presets.
 - [ ] Configurable embedding dimensions + re-index all.
 - [ ] Admin → Models, Providers. Hardware-based recommendations.
-- [ ] `notebooks/eagle_local_hf.ipynb`.
 
 ### Phase 3 — Privacy layer
 - [ ] `egress.ts` + `localFetch` + lint rule + CI check.
@@ -470,9 +472,9 @@ At the end of every phase: `typecheck`, `lint`, `test`, `next build` clean + **o
 - [ ] Voice mode, team voices (a Piper voice per agent).
 
 ### Phase 6 — Online (opt-in, through the gateway)
-- [ ] Gemini, Groq, Grok (xAI) providers + key pool (MERCY's `keypool.ts`).
+- [ ] Gemini and Groq (key paste → model list) + key pool (MERCY's `keypool.ts`); Ollama cloud models.
 - [ ] Data scope toggles + redaction + tier badges + consent.
-- [ ] Colab provider + `notebooks/eagle_colab.ipynb` + token auth.
+- [ ] Colab: `notebooks/eagle_colab.ipynb` (model cached in Drive), connection code, token + end-to-end encryption.
 - [ ] Web search (Tavily / SearXNG) through the gateway.
 
 ### Phase 7 — Online connectors (later, optional)
@@ -505,7 +507,7 @@ At the end of every phase: `typecheck`, `lint`, `test`, `next build` clean + **o
 
 ## 14. Open decisions
 
-1. **"Grok": xAI Grok, or Groq as in MERCY?** The plan keeps both (both are OpenAI-compatible).
+1. ~~**Grok or Groq**~~ — decided: Gemini and Groq, as in MERCY (other OpenAI-compatible APIs can be added as "Other").
 2. ~~**License**~~ — decided: AGPL-3.0-only (§11).
 3. **Windows**: native support, or is WSL2 enough?
 4. A **Docker** option? (`./eagle.sh` stays the default; Docker can be optional, but GPU/Ollama setup gets harder.)
