@@ -1,8 +1,8 @@
 # EAGLE
 
 A private, local AI assistant that runs on your own computer. Your database lives on your computer
-too, it works without internet, and **no data leaves your device** unless you turn on an online
-feature yourself.
+too, it works without internet, and **no data leaves your device — even when you are online.**
+The internet is only used to download EAGLE and the AI models.
 
 EAGLE is the local, privacy-first version of MERCY.
 
@@ -14,7 +14,8 @@ git clone https://github.com/<you>/eagle && cd eagle
 > Status: **planning**. Nothing runs yet.
 
 - Plan: [docs/PLAN.md](docs/PLAN.md)
-- AI models (Ollama local/cloud, Hugging Face in Jupyter or Colab, Gemini/Groq, your own model): [docs/AI_MODELS.md](docs/AI_MODELS.md)
+- AI models (all local: Ollama, Hugging Face in Jupyter, your own model): [docs/AI_MODELS.md](docs/AI_MODELS.md)
+- Runs on Linux (Ubuntu first) and macOS; Windows through WSL2.
 
 ## License
 

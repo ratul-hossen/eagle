@@ -2,8 +2,8 @@
 
 > **EAGLE** is the **local, privacy-first** version of MERCY.
 > It runs on one computer, keeps its database on that computer, works without internet, and
-> **no data ever leaves the device** — unless you deliberately turn on a specific online feature
-> for a specific job.
+> **no data ever leaves the device — not even when the computer is online.** The internet is used
+> only to download EAGLE itself and the model files, and a download carries no personal data.
 >
 > The repository is public. Anyone can clone it and run `./eagle.sh` to get their own EAGLE.
 
@@ -17,7 +17,7 @@ The AI model plan is in its own file: **[AI_MODELS.md](AI_MODELS.md)**.
 |---|---|---|
 | Where it runs | Vercel (cloud) | Your own computer (`127.0.0.1`) |
 | Database | Neon Postgres (cloud) | **PGlite** (embedded Postgres + pgvector, in `data/`) |
-| AI | Gemini → Groq → OpenRouter (all cloud) | **Six ways, several at once** (AI_MODELS.md): Ollama local, Hugging Face in Jupyter, your own model (local); opt-in: Colab, Ollama cloud, Gemini, Groq |
+| AI | Gemini → Groq → OpenRouter (all cloud) | **Local models only, several at once** (AI_MODELS.md): Ollama, Hugging Face in Jupyter, your own model, other local servers |
 | Embeddings | Gemini API | **Local** (Ollama `bge-m3` / `nomic-embed-text`) |
 | Modes | Public MERCY + Owner mode + ObS (`/kneel`) | **One mode**: always owner powers, no "Owner mode" label anywhere |
 | Sign-in | Google OAuth + owner password + `/to-me` | **Local password (Argon2id) + optional TOTP**, no Google |
@@ -26,22 +26,22 @@ The AI model plan is in its own file: **[AI_MODELS.md](AI_MODELS.md)**.
 | Python tools | Vercel Python function | Local Python subprocess (no network) |
 | Timers / automations | External cron (`/api/tick`) | EAGLE's own in-process scheduler |
 | Run | `npm run dev` / Vercel deploy | **`./eagle.sh`** |
-| Internet | Needed for everything | **Off by default**. Online work goes through a separate, audited gateway |
+| Internet | Needed for everything | **Not used**, except for downloads you start (install, update, models), which carry no personal data |
+| Platform | Any browser | **Linux** (Ubuntu first), macOS; Windows later through WSL2 (§4.3) |
+| Phone | Any browser | Optional, **directly from the laptop** over its own Wi-Fi hotspot or USB — never through the internet (§5.4) |
 
 ---
 
 ## 1. Principles (they override every other decision)
 
-1. **Local first, offline by default.** On first run EAGLE is in **Offline mode**. In Offline mode
-   the server sends not a single packet to an outside host. This is enforced in code (§5), not left
-   to the model.
+1. **Local only.** EAGLE never sends personal data off the computer — no prompts, chats, memory,
+   files, voice or logs — whether the internet is connected or not. There is no "Online mode".
+   This is enforced in code (§5), not left to the model or to a setting.
 2. **Data stays on the device.** Chats, memory, notes, knowledge, embeddings and voice all live in
    `data/`. Personal data never goes into git (`.gitignore` + a pre-commit check).
-3. **Online = explicit, scoped, visible, logged.**
-   - *Explicit*: you switch on Online mode yourself, and enable each cloud provider/connector separately.
-   - *Scoped*: a cloud model gets only that message; sending memory/notes/knowledge is off by default.
-   - *Visible*: every answer in the chat carries a badge: 🟢 Local / 🟡 Remote (your Colab) / 🔴 Cloud.
-   - *Logged*: every outbound request appears in Admin → Privacy → **Network log** (host, time, size, purpose).
+3. **Downloads are the only internet use, and they are visible.** Installing, updating and
+   downloading a model are started by you, say what they download, carry no personal data, and are
+   listed in Admin → Privacy → **Network log**. After setup, EAGLE works with the internet unplugged.
 4. **One user, one mode.** No visitors, no public persona, no Inbox. You = admin = owner.
 5. **Reproducible and public.** No keys, names or photos are hard-coded in the repo. All
    personalization happens through the first-run wizard and the admin panel and is saved in `data/`.
@@ -70,14 +70,14 @@ The AI model plan is in its own file: **[AI_MODELS.md](AI_MODELS.md)**.
 | Document tools (PDF/Word/PPT/Excel → text, Markdown → PDF/Word, Bangla shaping) | Same Python code (`python/mercy_tools` → `python/eagle_tools`) as a local subprocess |
 | Admin panel layout, save bar, sections | Same look; new section list (§7) |
 | Flow view (agents at work) | Same |
-| Key pool / slot rotation (`keypool.ts`) | Same idea, generalised to "provider slots" (local + cloud) |
-| Router (knowledge vs web) | Same; web only in Online mode |
+| Key pool / slot rotation (`keypool.ts`) | The fallback idea only, across local models (no API keys) |
+| Router (knowledge vs web) | Knowledge only (no web search); optional offline Wikipedia (Kiwix) takes the "web" role |
 | Chat summaries ("what did we talk about last week?") | Same, made on the scheduler by the `utility` model; encrypted with memory |
 | Background jobs (big work done a step at a time, report at the end) | Same, on the in-process scheduler — no 60-second limit locally, so steps can be longer |
 | File attachments in the chat (PDF, Word, Excel, photos) | Same composer; read by the local Python tools; photos by a local vision model |
 | Hands-free voice loop (silence detection, barge-in, sentence-by-sentence speech) | Same hook; STT/TTS go to the local voice server (§8) |
 | Automation templates | Same (morning brief without email/calendar until Phase 7: uses the local calendar and notes) |
-| MCP client | Same, and better suited locally: **stdio** MCP servers on this computer too (filesystem, git, SQLite…), not only remote HTTP ones; remote ones go through the Egress Gateway |
+| MCP client | Same, and better suited locally: **stdio** MCP servers on this computer too (filesystem, git, SQLite…), never remote HTTP ones (they would send data out) |
 | Usage page | Same, plus per-model speed (tokens/s) for local models |
 | **Agent skills, lessons from feedback, evals** | Same — and more important locally (§9.1) |
 
@@ -92,6 +92,8 @@ The AI model plan is in its own file: **[AI_MODELS.md](AI_MODELS.md)**.
 | Portfolio sync, `/api/sync`, cron | Needs internet and is personal (Ratul's portfolio) |
 | `/embed` widget, portfolio framing headers | Part of a public website |
 | Google OAuth sign-in, `ADMIN_EMAILS` | Online dependency; replaced by a local password |
+| Gemini, Groq, OpenRouter, key pool, Tavily web search, maps | Send data to outside services |
+| Google Calendar / Drive / Gmail, Telegram | Send data to outside services; replaced by the local calendar, local files and desktop notifications |
 | Visitor chat rate limits | Single user (sign-in brute-force limits stay) |
 | Neon HTTP driver, Vercel config, `vercel.json` | Local database |
 | `msedge-tts`, Web Speech API as defaults | Send data to outside servers → local voice (§8) |
@@ -99,15 +101,16 @@ The AI model plan is in its own file: **[AI_MODELS.md](AI_MODELS.md)**.
 | `public/owner.png`, `seed/knowledge/ratul-profile.md`, Ratul-specific text | Public repo; no personal data |
 | Web push (VAPID) | Push goes through Google/Apple/Mozilla servers; EAGLE uses the browser's local Notification API instead |
 | Inbox alerts on Telegram | No inbox (no visitors) |
-| GitHub connector | Online; comes back in Phase 7 through the gateway (or as a local `git` MCP server for local repositories) |
+| GitHub connector | Sends data to GitHub; for local repositories a local `git` MCP server does the job |
 
 ### 2.3 New (EAGLE only)
 
 - **`./eagle.sh`** — install, setup wizard, run, update, backup (§4).
-- **Network mode**: Offline / Online switch + **Egress Gateway** + **Network log** (§5).
-- **Connect a model**: one screen with six guided cards (Ollama local/cloud, Hugging Face in Jupyter or Colab, Gemini/Groq, your own model), auto-detect of local servers, pairing and connection codes, automatic tests (AI_MODELS.md §2).
+- **Local-only network layer**: loopback-only model calls, a download-only gateway and the **Network log** (§5).
+- **Connect a model**: one screen with guided cards (Ollama, Hugging Face in Jupyter, your own model, other local servers), auto-detect, pairing code, automatic tests (AI_MODELS.md §2).
+- **Phone access without the internet** (optional, off by default): the laptop's own hotspot or USB (§5.4).
 - **Local files tool**: a sandbox folder (`data/files/`) agents can read and write — nothing outside it.
-- **Local calendar** (ICS file) — offline alternative to Google Calendar; online sync optional later.
+- **Local calendar** (ICS file) instead of Google Calendar; you can import an `.ics` file you exported yourself.
 - **Lock screen**: auto-locks when idle; unlock with password/TOTP.
 - **Encrypted backup / restore** (one password-encrypted `.eagle-backup` file).
 - **Offline knowledge (optional)**: Kiwix/ZIM (offline Wikipedia) — "web-like" search without internet.
@@ -129,16 +132,15 @@ The AI model plan is in its own file: **[AI_MODELS.md](AI_MODELS.md)**.
 │    ├─ scheduler (timers, automations)                                  │
 │    ├─ llm/  → provider registry ──┬─► Ollama        127.0.0.1:11434    │
 │    │                              ├─► Jupyter/HF    127.0.0.1:8001     │
-│    │                              └─► (Online only) Egress Gateway ──┐ │
-│    ├─ voice/ → whisper (STT), piper/mms (TTS) [local python]         │ │
-│    ├─ pytools/ → python subprocess (no network)                      │ │
-│    └─ db/ → PGlite  ─────────────► data/db/ (pgvector + FTS)         │ │
-│                                                                      │ │
-│  data/  (gitignored)  db/ files/ models/ voices/ backups/ logs/      │ │
-└──────────────────────────────────────────────────────────────────────┼─┘
-                                                                       ▼
-                     (Online mode only + allowlist + log)   Gemini / Groq / Ollama cloud /
-                                                             Colab tunnel / Tavily
+│    │                              └─► other local server  127.0.0.1    │
+│    ├─ voice/ → whisper (STT), piper/mms (TTS) [local python]           │
+│    ├─ pytools/ → python subprocess (no network)                        │
+│    ├─ net/download → only: EAGLE updates, packages, model files        │
+│    └─ db/ → PGlite  ─────────────► data/db/ (pgvector + FTS)           │
+│                                                                        │
+│  data/  (gitignored)  db/ files/ models/ voices/ backups/ logs/        │
+└────────────────────────────────────────────────────────────────────────┘
+        Nothing personal ever crosses this line, online or not.
 ```
 
 ### 3.1 Stack
@@ -178,8 +180,7 @@ eagle/
 ├── config/
 │   └── eagle.example.toml   ← port, model and voice defaults (no secrets)
 ├── notebooks/
-│   ├── eagle_local_hf.ipynb ← local Jupyter: HF model → OpenAI-compatible server
-│   └── eagle_colab.ipynb    ← Colab: model from Drive → tunnel (opt-in)
+│   └── eagle_local_hf.ipynb ← local Jupyter: HF model → OpenAI-compatible server
 ├── python/
 │   ├── eagle_tools/         ← MERCY's document tools (copied)
 │   ├── eagle_voice/         ← whisper STT + piper/mms TTS server
@@ -213,7 +214,7 @@ git clone https://github.com/<you>/eagle && cd eagle
 | `./eagle.sh update` | `git pull` (verified tag) → `npm ci` → build → migrate. **The only command that needs internet on its own** (says so first) |
 | `./eagle.sh backup` / `restore <file>` | Encrypted backup |
 | `./eagle.sh reset-password` | Forgotten password, from the terminal (§6.2.3) |
-| `./eagle.sh offline` / `online` | Network mode from the terminal |
+| `./eagle.sh phone on` / `off` | Phone access over the laptop's hotspot or USB (§5.4) |
 | `./eagle.sh uninstall` | Removes the app; asks separately whether to delete `data/` |
 
 ### 4.2 First run
@@ -223,7 +224,7 @@ set in the browser.
 
 **In the terminal (`./eagle.sh`):**
 
-1. **Checks**: OS (Linux, macOS; Windows → WSL2), Node ≥ 20, Python ≥ 3.10, `git`, free disk, RAM, GPU (`nvidia-smi` / Apple Silicon).
+1. **Checks**: OS (**Linux** — Ubuntu/Debian first, then Fedora/Arch; macOS; on Windows it explains WSL2, §4.3), Node ≥ 20, Python ≥ 3.10, `git`, free disk, RAM, GPU (`nvidia-smi` / Apple Silicon).
 2. **Install (needs internet — this is the install step, and it says so)**: `npm ci` (exact versions from the lockfile),
    `python -m venv python/.venv && pip install -r requirements.txt --require-hashes`.
    If Ollama is missing it shows the install command (it never runs `curl | sh` without your confirmation).
@@ -251,11 +252,20 @@ set in the browser.
 7. **Voice (optional)**: download the local voice models.
 8. **Done** → the chat opens, signed in.
 
-After setup EAGLE runs fully **with the internet switched off** (Offline mode). A self-test
+After setup EAGLE runs fully **with the internet switched off**. A self-test
 (`doctor --offline`) proves it: it runs chat + RAG + voice with networking disabled
 (Linux network namespace / `unshare`, or with the proxy off).
 
-### 4.3 Running in the background (optional)
+### 4.3 Linux first, Windows through WSL2
+
+EAGLE is built and tested on **Linux** first (the owner's laptop runs Ubuntu), then macOS.
+Windows users run it inside **WSL2** — Windows' built-in Linux ("Windows Subsystem for Linux"):
+one command in PowerShell (`wsl --install`) installs Ubuntu inside Windows, and `./eagle.sh` runs
+there unchanged; the browser on Windows opens it at `127.0.0.1`. A native Windows installer is not
+planned for v1. **No Docker** (decided): it complicates GPU access and Ollama, and `./eagle.sh`
+already sets everything up.
+
+### 4.4 Running in the background (optional)
 
 `./eagle.sh service install` → a `systemd --user` unit on Linux, a `launchd` plist on macOS, so
 EAGLE starts at login.
@@ -264,70 +274,76 @@ EAGLE starts at login.
 
 ## 5. Network and privacy layer (the most important part)
 
-### 5.1 Two modes
+### 5.1 The rule
 
-| | **Offline (default)** | **Online** |
+EAGLE sends **no personal data** off the computer, whether the internet is on or off. There is no
+online mode, no cloud model, no web search and no outside connector. The only network traffic
+EAGLE ever starts is a **download you asked for**:
+
+| Download | When | What it sends |
 |---|---|---|
-| Local models (Ollama, Jupyter) | ✅ | ✅ |
-| Cloud models (Gemini, Groq, Ollama cloud) | ❌ | ✅ (if that provider is on) |
-| Colab model | ❌ | ✅ (opt-in) |
-| Web search | ❌ (Kiwix if installed) | ✅ |
-| Google Calendar/Gmail, Telegram | ❌ | ✅ (later, Phase 7) |
-| Voice | Local | Local (cloud voice optional) |
+| EAGLE's code and packages | `./eagle.sh` install, `./eagle.sh update` | The package names (from the lockfiles) |
+| A model | Admin → Connect a model → Download, `./eagle.sh models pull` | The model's name |
+| Voice models | Setup step 7 or Admin → Voice | The voice's name |
 
-Changing the mode asks for the password again. Online mode **switches itself off** after a while
-(default one hour, configurable), so it is never left on by accident.
+Each download says what it will fetch and from where before it starts. A computer that is never
+connected again after setup loses nothing but updates.
 
-### 5.2 Egress Gateway — enforced in code
+### 5.2 Enforced in code
 
-In MERCY, `fetch()` is called from many places (chat, search, sync, Telegram, Google). In EAGLE:
-
-- **One module** `src/lib/net/egress.ts` → `egressFetch(purpose, url, init)`.
-- A lint rule (ESLint `no-restricted-globals` / `no-restricted-imports`) **forbids** raw `fetch` /
-  `http.request` in server code; only `egress.ts` may use them. CI (GitHub Actions) checks it.
-- `egressFetch` checks:
-  1. Is the mode Online? (In Offline mode everything except loopback is rejected.)
-  2. Is the host on the **allowlist**? (Enabling a provider adds only its host:
-     `generativelanguage.googleapis.com`, `api.groq.com`, `api.x.ai`, your tunnel host…)
-  3. Does DNS resolve to a private/loopback address (SSRF / DNS rebinding guard)?
-  4. Request size limit.
-- Every request goes into the **Network log**: time, purpose (`chat:gemini`, `search:tavily`),
-  host, bytes out/in, status. Bodies are not logged (a log can itself be a leak).
-- Loopback calls (Ollama, Jupyter, voice server) go through `localFetch()`, which enforces a host
-  of `127.0.0.1` / `::1` / `localhost` (EAGLE warns if Ollama is exposed with `OLLAMA_HOST=0.0.0.0`).
+- **Loopback only for everything that carries data.** Model servers, the voice server and Python
+  tools are reached through `localFetch()`, which accepts only `127.0.0.1` / `::1` / `localhost`
+  and a port EAGLE knows. EAGLE warns if Ollama listens on `0.0.0.0` (anyone on the network could use it).
+- **Downloads go through one module**, `src/lib/net/download.ts` → `download(kind, url)`. It
+  accepts only a fixed allowlist of hosts (the npm and PyPI registries, `ollama.com`'s model
+  registry through the Ollama app, `huggingface.co`, GitHub for EAGLE's own releases), only GET,
+  never a request body, and never from a code path that has chat, memory or file data.
+- A lint rule forbids raw `fetch` / `http.request` / `net` in server code; only `localFetch` and
+  `download.ts` may use them. CI checks it, and a test runs the whole app with the network
+  namespace closed (`unshare -n`) to prove chat, RAG, agents, voice and documents work offline.
+- Ollama **cloud** models are detected and refused (AI_MODELS.md §3), because they are called
+  through the local Ollama app but run on Ollama's servers.
+- **Network log** (Admin → Privacy): every download with time, host, size and purpose. Bodies are
+  not logged. An empty log after setup is the expected state.
 
 ### 5.3 Browser side
 
 - **CSP**: `default-src 'self'; connect-src 'self'; img-src 'self' data: blob:; font-src 'self'; frame-ancestors 'none'`.
   The browser cannot make third-party requests either (no CDN, analytics or fonts).
-- No external CDNs, Google Fonts or analytics. Fonts (Inter, JetBrains Mono, Noto Sans Bengali) ship in the repo.
-- The Web Speech API (in Chrome, audio goes to Google's servers) is **off by default**; local whisper is used (§8).
+- Fonts (Inter, JetBrains Mono, Noto Sans Bengali) ship in the repo.
+- The browser's Web Speech API (in Chrome, audio goes to Google's servers) is **never used**;
+  speech recognition is local whisper (§8).
+- MERCY's web push (it goes through Google/Apple/Mozilla) is not copied; reminders use the
+  browser's local Notification API.
 
-### 5.4 Data scope before anything goes to the cloud
+### 5.4 Using EAGLE from your phone — without the internet (optional, off by default)
 
-Per cloud provider, toggles in admin (all OFF by default):
+The phone talks **directly to the laptop**, never through the internet or any outside server:
 
-- [ ] Send memory facts
-- [ ] Send private notes / knowledge chunks
-- [ ] Send chat history (last N turns)
-- [ ] Let agents use tools through the cloud model
+| Way | How |
+|---|---|
+| **Laptop hotspot** (recommended) | Admin → Phone → **Turn on**. EAGLE starts the laptop's own Wi-Fi hotspot (NetworkManager on Linux), with a strong password. The phone joins it; no router or internet is involved |
+| **USB** | Phone connected by cable with USB tethering; EAGLE listens on that USB network only |
+| **Home Wi-Fi** | Possible, but only if you choose it: the router sees encrypted traffic between the two devices, and nothing goes to the internet |
 
-By default a cloud model receives only **the current message + EAGLE's generic system prompt**.
-Optional **redaction**: phone numbers, emails, national ID, card numbers and address patterns
-(an extension of MERCY's `redactPrivate()`) are masked before sending.
+Rules when phone access is on:
 
-The chat composer shows a tier badge next to the model picker; selecting a cloud model turns the
-composer border red and shows "This message will be sent to <provider>".
-
----
-
+- EAGLE listens on that one network interface only (never `0.0.0.0`), and only while it is on;
+  it switches itself off after a set time (default 2 hours).
+- **Pairing by QR code**: the laptop shows a QR code with a one-time code; the phone scans it,
+  signs in with the password (+ TOTP if set) and is added to Admin → Security → Devices, where it
+  can be removed.
+- **HTTPS with EAGLE's own local certificate** (made on this laptop; the phone trusts it once
+  during pairing), so the hotspot can't read the traffic.
+- The phone gets the same chat and admin, including voice: the phone records, the laptop transcribes.
+- The phone needs no app (the PWA from MERCY: "Add to Home Screen").
 ## 6. Security
 
 ### 6.1 Threat model
 
 | Threat | Protection |
 |---|---|
-| Someone else on the LAN reaches EAGLE | Bound to `127.0.0.1` only. LAN/phone access is optional and off by default; when on: HTTPS (local CA) + password + TOTP |
+| Someone else on the network reaches EAGLE | Bound to `127.0.0.1` only. Phone access is optional and off by default; when on: one interface only, QR pairing, HTTPS (local certificate), password + TOTP, auto-off (§5.4) |
 | Another website in the browser calls EAGLE's API (CSRF / DNS rebinding) | `Host` header check (only `localhost:<port>` / `127.0.0.1:<port>`), `Origin` check on every POST, `SameSite=Strict` cookie |
 | Another user on the same machine | `data/` is `chmod 700`, secrets `600`; sensitive columns encrypted (§6.3) |
 | Stolen laptop | Full-disk encryption recommended (LUKS / FileVault / BitLocker) + app-level encryption + encrypted backups |
@@ -351,8 +367,8 @@ composer border red and shows "This message will be sent to <provider>".
   in Admin → Security.
 - 30 minutes idle → **lock screen** (work continues in the background, the UI is locked);
   12 hours maximum (MERCY's owner-session logic reused).
-- **Re-confirm for sensitive actions**: switching to Online mode, changing the password,
-  showing or changing API keys, a new recovery key, backup/restore and erase ask for the password
+- **Re-confirm for sensitive actions**: turning on phone access, pairing a phone, changing the
+  password, a new recovery key, backup/restore and erase ask for the password
   again if it wasn't entered in the last 10 minutes.
 - Failed attempts: 5 within 15 minutes lock sign-in for the rest of those 15 minutes (MERCY's rate
   limit, local). Recovery attempts have the same limit.
@@ -393,9 +409,8 @@ the original value (for example to send an API key to a provider).
 | TOTP backup codes | **Argon2id** hash each, one-time use | Only checked |
 | Session tokens | **SHA-256** hash | Only checked; a copied database gives no sessions |
 | Setup token, pairing codes (Jupyter) | **SHA-256** hash + expiry, one-time use | Only checked |
-| API keys (Gemini, Groq, Ollama cloud), connector tokens | AES-256-GCM **encrypted** | EAGLE must send the real value |
+| Phone pairing keys, the local HTTPS certificate's private key | AES-256-GCM **encrypted** / file `600` | Needed to talk to a paired phone |
 | TOTP secret | AES-256-GCM **encrypted** | Needed to compute codes |
-| Colab connection token / end-to-end key | AES-256-GCM **encrypted** | Needed for every request |
 | Model files, backups | **SHA-256** checksum (backups: HMAC) | Detects tampering or corruption |
 
 All comparisons use constant-time equality (`timingSafeEqual`), as in MERCY. Hashing uses
@@ -406,7 +421,7 @@ well-known libraries (`argon2`/`@node-rs/argon2`, Node's `crypto`) — no home-m
 - A random 256-bit **data key**, wrapped twice and stored in `secrets.json`: once with a key
   derived from the password (Argon2id), once with a key derived from the recovery key. Changing
   the password or the recovery key only re-wraps it; data is not re-encrypted.
-- AES-256-GCM for: memory, private notes, chat messages, cloud API keys, connector tokens.
+- AES-256-GCM for: memory (facts, chat summaries, lessons), private notes, chat messages, skills.
 - **Honest trade-off**: knowledge chunk text and embeddings are not encrypted, because search
   (full-text + vector) needs plaintext. That is why **full-disk encryption** is strongly
   recommended; `doctor` checks for it and warns.
@@ -434,7 +449,7 @@ own password (§6.2); there is no Google sign-in.
   It can be bookmarked or opened directly.
 
 **Everything is set from here.** After installation nothing needs a terminal or a config file:
-models, Online/Offline, voice, identity, agents, keys, backups — all in the admin panel. The
+models, phone access, voice, identity, branding, agents, skills, backups — all in the admin panel. The
 terminal is only for installing, updating and the password reset without a browser.
 
 Sections:
@@ -453,7 +468,8 @@ Sections:
 | | **Files** | Browse the `data/files/` sandbox |
 | AI | **Connect a model** | The six guided cards, auto-detect, pairing/connection codes (AI_MODELS.md §2) |
 | | **Models** | Every connected model with tier, status, abilities and eval score; roles, per-agent models, presets, compare; context length, temperature, data scope, keys; hardware info |
-| Privacy | **Network** | Offline/Online, allowlist, auto-off timer, **Network log** |
+| Privacy | **Network** | Proof of local-only: the **Network log** (downloads only), the offline self-test result, which local servers EAGLE talks to |
+| | **Phone** | Turn phone access on/off (hotspot / USB / home Wi-Fi), QR pairing, paired devices, auto-off timer |
 | | **Security** | Change password, new recovery key, TOTP on/off, sessions, security log, lock timeout |
 | | **Backup** | Back up now, restore, schedule |
 | System | **System** | Database health, re-index all, logs, version, update instructions |
@@ -489,10 +505,7 @@ Status of every MERCY owner tool in EAGLE:
 | **new** `file_list`, `file_read`, `file_write` | read/safe/act | ✅ | `data/files/` only; overwrite/delete = act |
 | **new** `calendar_local_*` | read/safe | ✅ | ICS file |
 | **new** `offline_wiki_search` | read | ✅ | If a Kiwix ZIM is installed |
-| `web_search` | read | Online | Tavily (key) / SearXNG (self-hosted) |
-| `calendar_*`, `drive_*`, `gmail_*` | read/act | Online, Phase 7 | Tokens encrypted; act = Approve |
-| `message_me` (Telegram) | act | Online, Phase 7 | Messages go through Telegram's servers — explicit warning |
-| `maps_*` | read | Online | — |
+| `web_search`, `maps_*`, `calendar_*` (Google), `drive_*`, `gmail_*`, `message_me` (Telegram), `github_*` | — | ❌ | **Not in EAGLE**: they send data out (§5.1) |
 
 Automations (e.g. "a brief every morning at 8") also run offline, with a local model. When the
 computer is off, automations don't run (it isn't a 24/7 cloud). On the next start EAGLE shows
@@ -526,8 +539,8 @@ v1): export good examples + lessons as a small fine-tuning dataset for "your own
 - Starter suggestions are tasks (like MERCY's owner starters), personalised.
 - **Admin icon at the bottom left** of the sidebar → `/admin` (§7).
 - New pages in MERCY's design: `/setup` (first run), `/login` (with **Forgot password?**), `/recover`, and the lock screen.
-- A small status in the header: model name + 🟢/🟡/🔴 tier + network mode icon (✈️ offline).
-- A **model picker** in the composer (local by default; cloud models appear in Online mode, with a red border).
+- A small status in the header: model name and a 🔒 "Local" mark (with the Network log one click away).
+- A **model picker** in the composer (local models only).
 - Light/dark, `prefers-reduced-motion` and the Bangla font stay as they are.
 - The assistant's default name is **EAGLE** and can be changed in admin (whoever clones it can name it).
 
@@ -557,7 +570,7 @@ At the end of every phase: `typecheck`, `lint`, `test`, `next build` clean + **o
 ### Phase 0 — Repository bootstrap
 - [ ] Copy `src/`, `python/`, `scripts/` and config from the latest MERCY `main` (§1.6; record the commit in `docs/UPSTREAM.md`; MERCY stays read-only).
 - [ ] Remove personal data: `owner.png`, `ratul-profile.md`, voice lines; Ratul/Dhaka hard-coding → config.
-- [ ] Remove Vercel, Neon, `api/py`, embed, sync, inbox, kneel, Google auth, web push and Telegram code (GitHub and Google connectors parked for Phase 7).
+- [ ] Remove Vercel, Neon, `api/py`, embed, sync, inbox, kneel, Google auth, web push, Telegram, GitHub, Google connectors, maps, web search, Gemini/Groq and the key pool (all send data out, §5.1).
 - [ ] `.gitignore`, LICENSE, README, pre-commit hook, CI (lint + typecheck + test + raw-fetch check).
 
 ### Phase 1 — Local foundation
@@ -580,10 +593,10 @@ At the end of every phase: `typecheck`, `lint`, `test`, `next build` clean + **o
 - [ ] Admin → Models, Providers. Hardware-based recommendations.
 
 ### Phase 3 — Privacy layer
-- [ ] `egress.ts` + `localFetch` + lint rule + CI check.
-- [ ] Offline/Online mode, auto-off, allowlist, Network log page.
-- [ ] Encryption at rest (data key, wrapping, column encryption).
-- [ ] Offline self-test (`doctor --offline`).
+- [ ] `localFetch` (loopback only) + `download.ts` (allowlisted downloads, GET only) + lint rule + CI check.
+- [ ] Ollama cloud-model detection and refusal.
+- [ ] Network log page; encryption at rest (data key, wrapping, column encryption).
+- [ ] Offline self-test (`doctor --offline`, network namespace closed) in CI.
 
 ### Phase 4 — Owner powers
 - [ ] Agent runner + team + flow view (tool calling tested with local models, AI_MODELS.md §7).
@@ -599,21 +612,19 @@ At the end of every phase: `typecheck`, `lint`, `test`, `next build` clean + **o
 - [ ] Local `/api/stt`, `/api/tts`; a MediaRecorder path in `useVoice`.
 - [ ] Voice mode, team voices (a Piper voice per agent).
 
-### Phase 6 — Online (opt-in, through the gateway)
-- [ ] Gemini and Groq (key paste → model list) + key pool (MERCY's `keypool.ts`); Ollama cloud models.
-- [ ] Data scope toggles + redaction + tier badges + consent.
-- [ ] Colab: `notebooks/eagle_colab.ipynb` (model cached in Drive), connection code, token + end-to-end encryption.
-- [ ] Web search (Tavily / SearXNG) through the gateway.
+### Phase 6 — Phone access without the internet (optional)
+- [ ] Laptop hotspot (NetworkManager) and USB tethering; bind to that interface only; auto-off.
+- [ ] Local certificate authority, QR pairing, device list and removal; PWA on the phone.
 
-### Phase 7 — Online connectors (later, optional)
-- [ ] Google Calendar/Drive/Gmail (local OAuth with a loopback redirect `http://127.0.0.1:<port>/callback`).
-- [ ] Telegram (long polling — EAGLE is local, so no webhook and no public URL).
-- [ ] All through the gateway; every act needs Approve.
+### Phase 7 — Local extras
+- [ ] Local MCP servers over stdio (filesystem in `data/files/`, git, SQLite), sandboxed.
+- [ ] Offline Wikipedia (Kiwix/ZIM) as the "web" for the router.
+- [ ] ICS import for the local calendar.
 
 ### Phase 8 — Hardening and release
 - [ ] Backup/restore, service install, update with signed-tag verification.
 - [ ] `SECURITY.md`, `ADMIN.md`, screenshots.
-- [ ] Tests on Linux + macOS, Windows (WSL2) guide.
+- [ ] Tests on Ubuntu (the owner's laptop) and one other Linux, then macOS; a WSL2 guide for Windows.
 - [ ] Tag `v1.0.0`.
 
 ---
@@ -622,22 +633,25 @@ At the end of every phase: `typecheck`, `lint`, `test`, `next build` clean + **o
 
 | Risk | Response |
 |---|---|
-| Local models are weaker than MERCY's Gemini, especially in **Bangla** and **tool calling** | Model choices in AI_MODELS.md; skills, lessons and evals (§9.1); a separate (bigger) model for agents; fewer tools; opt-in cloud fallback |
+| Local models are weaker than MERCY's Gemini, especially in **Bangla** and **tool calling** | Model choices in AI_MODELS.md; skills, lessons and evals (§9.1); a separate (bigger) model for agents; fewer tools |
 | Low-RAM computers (8 GB) | Small models (3–4B), smaller context, voice optional |
 | Slow on CPU only | Streaming, small models, lower `num_ctx`; GPU used automatically when present |
 | Not 24/7 (computer off = automations off) | Show missed tasks + catch up |
-| Turning on the cloud sends data out — EAGLE can't prevent that | Off by default, scopes, badges, logs — so you always know |
-| Colab terms / free-tier limits, public tunnel URL | Opt-in, token auth, warnings; not production-grade |
+| No cloud model to fall back on when a local model is weak | Skills, lessons and evals (§9.1); recommend the biggest model the laptop can run; be honest in the answer when unsure |
+| No web search, so no fresh news or prices | Said plainly in the answer; offline Wikipedia for general knowledge |
+| A phone on home Wi-Fi shares the network with other devices | Hotspot or USB recommended; HTTPS + pairing + auto-off on any network |
 | PGlite is single-process and slower with large data | System Postgres as an alternative backend |
 | Encryption vs search trade-off | Recommend full-disk encryption + `doctor` check |
 
 ---
 
-## 14. Open decisions
+## 14. Decisions
 
-1. ~~**Grok or Groq**~~ — decided: Gemini and Groq, as in MERCY (other OpenAI-compatible APIs can be added as "Other").
-2. ~~**License**~~ — decided: AGPL-3.0-only (§11).
-3. **Windows**: native support, or is WSL2 enough?
-4. A **Docker** option? (`./eagle.sh` stays the default; Docker can be optional, but GPU/Ollama setup gets harder.)
-5. Use EAGLE from a phone on the same Wi-Fi? (Off by default; HTTPS + TOTP when on.)
-6. Keep "EAGLE" as the default assistant name, or require each user to pick a name in the wizard?
+All decided (2026-10-10, by the owner):
+
+1. **Models**: local only. Gemini, Groq, Ollama Cloud and Colab are not supported (they send data out).
+2. **License**: AGPL-3.0-only (§11).
+3. **Platform**: runs on the owner's own laptop — Linux (Ubuntu) first, then macOS; Windows through WSL2 (§4.3).
+4. **Docker**: no.
+5. **Phone**: optional, off by default, only directly from the laptop (hotspot / USB, or home Wi-Fi if chosen) — never through the internet (§5.4).
+6. **Name**: "EAGLE" by default; name, look and avatar are changed in Admin → **Branding** (and asked once in the first-run setup).
