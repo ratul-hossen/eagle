@@ -45,8 +45,11 @@ The AI model plan is in its own file: **[AI_MODELS.md](AI_MODELS.md)**.
 4. **One user, one mode.** No visitors, no public persona, no Inbox. You = admin = owner.
 5. **Reproducible and public.** No keys, names or photos are hard-coded in the repo. All
    personalization happens through the first-run wizard and the admin panel and is saved in `data/`.
-6. **The MERCY repository is never touched.** Code is **copied** from MERCY at a fixed commit
-   (`d745b16`); no change, PR or commit is made to MERCY.
+6. **The MERCY repository is never touched.** Code is **copied** from MERCY at a fixed commit,
+   chosen when Phase 0 starts: the latest MERCY `main` (at the time of writing `c47e2b4`, which
+   adds background jobs, chat summaries, backup, hands-free voice and MCP over `d745b16`, plus the
+   agent skills / lessons / evals work that follows it). The commit used is written in
+   `docs/UPSTREAM.md`; no change, PR or commit is made to MERCY.
 
 ---
 
@@ -69,6 +72,14 @@ The AI model plan is in its own file: **[AI_MODELS.md](AI_MODELS.md)**.
 | Flow view (agents at work) | Same |
 | Key pool / slot rotation (`keypool.ts`) | Same idea, generalised to "provider slots" (local + cloud) |
 | Router (knowledge vs web) | Same; web only in Online mode |
+| Chat summaries ("what did we talk about last week?") | Same, made on the scheduler by the `utility` model; encrypted with memory |
+| Background jobs (big work done a step at a time, report at the end) | Same, on the in-process scheduler — no 60-second limit locally, so steps can be longer |
+| File attachments in the chat (PDF, Word, Excel, photos) | Same composer; read by the local Python tools; photos by a local vision model |
+| Hands-free voice loop (silence detection, barge-in, sentence-by-sentence speech) | Same hook; STT/TTS go to the local voice server (§8) |
+| Automation templates | Same (morning brief without email/calendar until Phase 7: uses the local calendar and notes) |
+| MCP client | Same, and better suited locally: **stdio** MCP servers on this computer too (filesystem, git, SQLite…), not only remote HTTP ones; remote ones go through the Egress Gateway |
+| Usage page | Same, plus per-model speed (tokens/s) for local models |
+| **Agent skills, lessons from feedback, evals** | Same — and more important locally (§9.1) |
 
 ### 2.2 Removed
 
@@ -86,6 +97,9 @@ The AI model plan is in its own file: **[AI_MODELS.md](AI_MODELS.md)**.
 | `msedge-tts`, Web Speech API as defaults | Send data to outside servers → local voice (§8) |
 | `next/font/google` | Downloads from Google Fonts at build time → fonts bundled with `next/font/local` |
 | `public/owner.png`, `seed/knowledge/ratul-profile.md`, Ratul-specific text | Public repo; no personal data |
+| Web push (VAPID) | Push goes through Google/Apple/Mozilla servers; EAGLE uses the browser's local Notification API instead |
+| Inbox alerts on Telegram | No inbox (no visitors) |
+| GitHub connector | Online; comes back in Phase 7 through the gateway (or as a local `git` MCP server for local repositories) |
 
 ### 2.3 New (EAGLE only)
 
@@ -159,6 +173,7 @@ eagle/
 │   ├── PLAN.md              ← this file
 │   ├── AI_MODELS.md         ← AI model details
 │   ├── SECURITY.md          ← threat model: what is protected and what isn't
+│   ├── UPSTREAM.md          ← which MERCY commit the code was copied from
 │   └── ADMIN.md             ← admin panel guide
 ├── config/
 │   └── eagle.example.toml   ← port, model and voice defaults (no secrets)
@@ -483,6 +498,25 @@ Automations (e.g. "a brief every morning at 8") also run offline, with a local m
 computer is off, automations don't run (it isn't a 24/7 cloud). On the next start EAGLE shows
 what was missed, reusing MERCY's catch-up logic (`nextDue`).
 
+### 9.1 Making the agents good at their jobs (more important with local models)
+
+Local 3–9B models are weaker than Gemini at following long instructions, at tool calling and at
+Bangla. EAGLE closes most of that gap by giving the agents better instructions and letting them
+learn, instead of needing a bigger model. All of this comes from MERCY:
+
+| Mechanism | What it is | Why it helps a small model |
+|---|---|---|
+| **Skills (playbooks)** | Named instruction documents for a kind of task ("Formal email to a professor", "Weekly report", "Study plan"), each with a one-line "when to use". An agent's prompt lists only the names; `use_skill` loads the full text when needed (or it is included directly when the task clearly matches) | Short prompts with exact steps work far better on small models than one long system prompt. Skills are Markdown in `data/` — the user can write their own, and EAGLE can propose one after a task ("Save this as a skill?", needs Approve) |
+| **Lessons from feedback** | 👍/👎 on every answer; a 👎 with a note, or a correction in the chat ("no, more formal"), becomes a short lesson for the agent that did the work, added to its prompt (≤ 15 per agent) | The model doesn't need to be retrained: the same mistake is not repeated |
+| **Evals** | Test cases per agent (prompt + rubric + expected tools), run on demand in a dry-run sandbox (no real side effects) and scored by a judge model plus fixed checks; history per model | Choose models and prompts by measurement (merged with AI_MODELS.md §11.2). Locally, a run costs only time, so it can run after every model or prompt change, or nightly |
+| **Worked examples** | A 👍 answer can be saved as an example for its skill | Small models copy a format from one good example better than from a description |
+| **Self-check** | For bigger tasks the agent checks its draft against the task (answered everything? facts from the tool output?) before reporting | Costs one extra local call — affordable locally (no API bill), off for quick chats |
+| **Per-agent model** | AI_MODELS.md §10.2 | A strong tool model where it matters, a small fast one elsewhere |
+
+Lessons, skills and examples are part of the encrypted backup. A future option (not planned for
+v1): export good examples + lessons as a small fine-tuning dataset for "your own model"
+(AI_MODELS.md, way 6).
+
 ---
 
 ## 10. Frontend — like MERCY, one mode
@@ -521,9 +555,9 @@ what was missed, reusing MERCY's catch-up logic (`nextDue`).
 At the end of every phase: `typecheck`, `lint`, `test`, `next build` clean + **offline self-test**.
 
 ### Phase 0 — Repository bootstrap
-- [ ] Copy `src/`, `python/`, `scripts/` and config from MERCY `d745b16` (MERCY stays read-only).
+- [ ] Copy `src/`, `python/`, `scripts/` and config from the latest MERCY `main` (§1.6; record the commit in `docs/UPSTREAM.md`; MERCY stays read-only).
 - [ ] Remove personal data: `owner.png`, `ratul-profile.md`, voice lines; Ratul/Dhaka hard-coding → config.
-- [ ] Remove Vercel, Neon, `api/py`, embed, sync, inbox, kneel, Google auth and Telegram code.
+- [ ] Remove Vercel, Neon, `api/py`, embed, sync, inbox, kneel, Google auth, web push and Telegram code (GitHub and Google connectors parked for Phase 7).
 - [ ] `.gitignore`, LICENSE, README, pre-commit hook, CI (lint + typecheck + test + raw-fetch check).
 
 ### Phase 1 — Local foundation
@@ -556,6 +590,9 @@ At the end of every phase: `typecheck`, `lint`, `test`, `next build` clean + **o
 - [ ] Memory, notes, timers, automations (in-process scheduler), notifications.
 - [ ] Python document tools as a local subprocess; PDF/Office upload in Knowledge.
 - [ ] File sandbox tools, local calendar.
+- [ ] Background jobs, chat summaries, automation templates on the in-process scheduler.
+- [ ] Skills, lessons from feedback, worked examples, self-check, evals (§9.1) — run the eval set against each recommended local model and publish the scores in `docs/AI_MODELS.md`.
+- [ ] MCP: local stdio servers (sandboxed to `data/files/` where they touch files) + remote ones through the gateway.
 
 ### Phase 5 — Local voice
 - [ ] `python/eagle_voice`: whisper STT + Piper/MMS TTS server.
@@ -585,7 +622,7 @@ At the end of every phase: `typecheck`, `lint`, `test`, `next build` clean + **o
 
 | Risk | Response |
 |---|---|
-| Local models are weaker than MERCY's Gemini, especially in **Bangla** and **tool calling** | Model choices in AI_MODELS.md; a separate (bigger) model for agents; fewer tools; opt-in cloud fallback |
+| Local models are weaker than MERCY's Gemini, especially in **Bangla** and **tool calling** | Model choices in AI_MODELS.md; skills, lessons and evals (§9.1); a separate (bigger) model for agents; fewer tools; opt-in cloud fallback |
 | Low-RAM computers (8 GB) | Small models (3–4B), smaller context, voice optional |
 | Slow on CPU only | Streaming, small models, lower `num_ctx`; GPU used automatically when present |
 | Not 24/7 (computer off = automations off) | Show missed tasks + catch up |

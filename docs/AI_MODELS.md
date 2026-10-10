@@ -404,11 +404,18 @@ Small local models make tool-call mistakes (bad JSON, wrong tool, loops):
 3. `MAX_AGENT_STEPS` 3–4 locally (5 in MERCY); temperature 0.2 for tool roles.
 4. A stronger orchestrator with smaller workers (§10.1).
 5. **Simple mode**: with a weak model, one agent with all tools instead of a team.
-6. `act` tools always need your Approve, so a wrong tool call can't do harm.
+6. **Skills and lessons** (PLAN.md §9.1): short task playbooks loaded only when needed, and lessons
+   from the user's feedback, so a small model gets exact instructions instead of a long prompt.
+7. `act` tools always need your Approve, so a wrong tool call can't do harm.
 
 ### 11.2 Evals — choose models by measurement
 
-`eval/` in the repo:
+Two layers, both from MERCY's evals (PLAN.md §9.1):
+
+- **Agent evals** (Admin → Evals): test cases per agent with a rubric and expected tools, run in a
+  dry-run sandbox and scored by a judge model + fixed checks. The user can add their own cases;
+  scores are kept per model, so "did this model or prompt change make it better?" has an answer.
+- **Model benchmarks** in `eval/` in the repo:
 
 - `eval/tools.jsonl` — 40–60 requests with the expected tool and arguments ("set an alarm for 7 tomorrow morning" → `set_timer`).
 - `eval/bangla.jsonl` — Bangla questions + a knowledge chunk → does the answer contain the key fact?
